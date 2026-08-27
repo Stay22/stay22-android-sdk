@@ -72,9 +72,14 @@ Tasks:
 
    - Ensure `minSdk` is 26 or newer in the app module's `defaultConfig`.
    - The `.aar` merges its own `AndroidManifest.xml`, which contributes the
-     `INTERNET` and `POST_NOTIFICATIONS` permissions, a `booking` scheme `<queries>`
-     entry, and an internal notification-tap activity. Do not redeclare these in the
-     host manifest.
+     `INTERNET` and `POST_NOTIFICATIONS` permissions, an internal notification-tap
+     activity, and a `<queries>` entry for each of five travel apps the SDK checks for
+     (`com.airbnb.android`, `com.booking`, `com.expedia.bookings`, `com.hcom.android`,
+     `com.agoda.mobile.consumer`). Those entries ship in the host APK and are publicly
+     inspectable; flag this to the app owner, since it is the kind of declaration an
+     app-store or privacy review will ask about. They can be removed with a
+     `tools:node="remove"` override — see the README — at the cost of provider routing.
+     Do not redeclare any of these in the host manifest.
 
 3. Initialize the SDK once, early in app startup.
    Initialize from `Application.onCreate()`.
