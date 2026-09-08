@@ -39,8 +39,43 @@ dependencies {
 - The published POM declares the SDK's transitive dependencies, so they resolve
   automatically as long as `google()` and `mavenCentral()` are present.
 - The `.aar` merges its own `AndroidManifest.xml`, which contributes the `INTERNET`
-  and `POST_NOTIFICATIONS` permissions, a `booking` scheme `<queries>` entry, and an
-  internal notification-tap activity. Do not redeclare these in the host manifest.
+  and `POST_NOTIFICATIONS` permissions, an internal notification-tap activity, and a
+  `<queries>` entry for each travel app the SDK checks for (see
+  [Provider app detection](#provider-app-detection)). Do not redeclare these in the host
+  manifest.
+
+### Provider app detection
+
+The SDK checks which travel apps are installed and sends the result to Stay22, so a
+notification can be routed to a provider the user can already open. Detection uses
+`PackageManager.getPackageInfo`; no permission is required.
+
+**Five packages are checked, and the merged manifest declares a `<queries>` entry for
+each. These entries are part of your shipped APK and are publicly inspectable:**
+
+| Package | App |
+|---|---|
+| `com.airbnb.android` | Airbnb |
+| `com.booking` | Booking.com |
+| `com.expedia.bookings` | Expedia |
+| `com.hcom.android` | Hotels.com |
+| `com.agoda.mobile.consumer` | Agoda |
+
+No action is needed for detection to work. If you would rather not ship these
+declarations, remove them with a manifest-merger override in your own manifest:
+
+```xml
+<queries>
+    <package android:name="com.airbnb.android" tools:node="remove" />
+    <package android:name="com.booking" tools:node="remove" />
+    <package android:name="com.expedia.bookings" tools:node="remove" />
+    <package android:name="com.hcom.android" tools:node="remove" />
+    <package android:name="com.agoda.mobile.consumer" tools:node="remove" />
+</queries>
+```
+
+Removing them makes the SDK report those apps as not installed regardless of whether
+they are, which only affects provider routing — notifications still work.
 
 ### Manual (AAR)
 
