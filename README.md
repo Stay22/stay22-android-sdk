@@ -316,5 +316,5 @@ agreement with Stay22. Contact your Stay22 representative for terms.
 
 ## Support
 
-Questions? Contact your Stay22 representative or visit
-[stay22.com](https://www.stay22.com).
+Questions? See https://dev.stay22.com/docs/mobile-sdk or contact your Stay22
+representative.
