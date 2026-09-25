@@ -5,7 +5,7 @@ captures a destination, dates, or a specific hotel, the SDK schedules a single,
 well-timed local notification that opens a curated Stay22 booking experience. The
 Android contract mirrors the iOS SDK public surface where platform differences allow it.
 
-- Kotlin · minSdk 26 (Android 8.0)
+- Kotlin · minSdk 24 (Android 7.0)
 - No GPS permission required
 - You control enablement, notification permission, and user consent
 
@@ -35,7 +35,7 @@ dependencies {
 }
 ```
 
-- Ensure `minSdk` is 26 or newer in the app module's `defaultConfig`.
+- Ensure `minSdk` is 24 or newer in the app module's `defaultConfig`.
 - The published POM declares the SDK's transitive dependencies, so they resolve
   automatically as long as `google()` and `mavenCentral()` are present.
 - The `.aar` merges its own `AndroidManifest.xml`, which contributes the `INTERNET`
@@ -74,7 +74,7 @@ class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        Stay22.isEnabled = userHasOptedInToStay22Offers
+        Stay22.setEnabled(this, userHasOptedInToStay22Offers)
         Stay22.initialize(application = this, aid = "your-partner-id")
     }
 }
@@ -103,22 +103,40 @@ Recommended practices when enabling Stay22:
 - provide an in-app opt-out control.
 
 ```kotlin
-Stay22.isEnabled = userHasOptedInToStay22Offers
+Stay22.setEnabled(application, userHasOptedInToStay22Offers)
 ```
 
-`isEnabled` is persisted and can be set before initialization. Setting it to `false`
-clears pending Stay22 notification state and prevents new schedules.
+If your app requires an affirmative consent choice, add this inside the host app's
+`<application>` element. The SDK then stays disabled until you pass an affirmative
+choice to `setEnabled`:
+
+```xml
+<meta-data
+    android:name="com.stay22.sdk.RequiresConsent"
+    android:value="true" />
+```
+
+Call `setEnabled(application, choice)` before or after initialization. It saves the
+choice across launches. Call it with `false` when consent is withdrawn to clear
+pending Stay22 notifications and prevent new ones. To read the enabled state before
+initialization, use `Stay22.readEnabled(application)`.
 
 ## Notification Permission
 
 ```kotlin
-val canShow = Stay22.hasNotificationPermission()
-val currentStateAfterRequest = Stay22.requestNotificationPermission()
+Stay22.requestNotificationPermission { canShowNotifications ->
+    android.util.Log.d("Stay22", "Notifications available: $canShowNotifications")
+}
 ```
 
-On Android 13 (API 33) and newer, `requestNotificationPermission()` asks from the
-current resumed Activity when one is available. The platform returns the final user
-choice asynchronously through the normal Android permission flow.
+`requestNotificationPermission(callback)` reports `true` through the callback if
+Stay22 can already show notifications. Otherwise, on Android 13 (API 33) and newer,
+it requests permission from the current resumed Activity. If permission is unavailable
+and the SDK is uninitialized or no Activity is resumed, the callback reports `false`
+without showing a prompt. On Android 12 and older, it reports the current state
+without prompting. Use `hasNotificationPermission()` when you only need the current
+state. The no-argument `requestNotificationPermission()` returns the permission state
+before the prompt is answered.
 
 ## Travel Context
 
@@ -293,12 +311,13 @@ disclosures, and app-store privacy answers.
 | API | Purpose |
 |---|---|
 | `Stay22.initialize(application, aid)` | Start the SDK from `Application.onCreate()`. Android requires the `Application` for lifecycle callbacks. |
-| `Stay22.isEnabled` | Persisted enable/disable flag for consent or settings. Can be set before initialization. |
+| `Stay22.setEnabled(application, enabled)` / `readEnabled(application)` | Save or read consent before initialization. |
+| `Stay22.isEnabled` | Enable/disable scheduling after initialization. |
 | `Stay22.isInitialized` | Whether initialization completed. |
 | `Stay22.notificationConfig` | Notification text and notification metadata. |
 | `Stay22.campaignId` | Optional attribution value added to generated URLs. |
 | `Stay22.hasNotificationPermission()` | Current Android notification permission state. |
-| `Stay22.requestNotificationPermission()` | Request Android 13+ notification permission from the resumed Activity when available. |
+| `Stay22.requestNotificationPermission(callback)` | Request Android 13+ notification permission and learn whether Stay22 can show notifications. |
 | `Stay22.setTravelContext(...)` | Provide destination context. |
 | `Stay22.clearTravelContext()` | Clear explicit travel context and pending notification state. |
 | `Stay22.advanced.setEventListener(...)` | Register an event listener. |
