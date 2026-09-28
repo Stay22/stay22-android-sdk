@@ -3,11 +3,21 @@
   <groupId>com.stay22</groupId>
   <artifactId>sdk</artifactId>
   <versioning>
-    <latest>1.4.0</latest>
-    <release>1.4.0</release>
+    <latest>1.5.0</latest>
+    <release>1.5.0</release>
     <versions>
+      <version>1.0.8</version>
+      <version>1.0.9</version>
+      <version>1.0.10</version>
+      <version>1.0.11</version>
+      <version>1.0.12</version>
+      <version>1.0.13</version>
+      <version>1.1.0</version>
+      <version>1.2.0</version>
+      <version>1.3.0</version>
       <version>1.4.0</version>
+      <version>1.5.0</version>
     </versions>
-    <lastUpdated>20260925202821</lastUpdated>
+    <lastUpdated>20260928183836</lastUpdated>
   </versioning>
 </metadata>
