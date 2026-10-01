@@ -31,7 +31,7 @@ Then add the dependency in the app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.stay22:sdk:1.5.0")
+    implementation("com.stay22:sdk:1.6.0")
 }
 ```
 
