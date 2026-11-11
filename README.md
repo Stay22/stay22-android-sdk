@@ -1,13 +1,12 @@
 # Stay22 Android SDK
 
 Native Android SDK for notification-driven accommodation discovery. When your app
-captures a destination, dates, or a specific hotel, the SDK schedules a single,
-well-timed local notification that opens a curated Stay22 booking experience. The
-Android contract mirrors the iOS SDK public surface where platform differences allow it.
+captures a destination, dates or a hotel, the SDK can schedule one local notification
+that opens a Stay22 booking page, or an installed booking app when one can open the offer.
 
 - Kotlin · minSdk 24 (Android 7.0)
 - No GPS permission required
-- You control enablement, notification permission, and user consent
+- You control enablement, notification permission and user consent
 
 ## Installation
 
@@ -31,7 +30,7 @@ Then add the dependency in the app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.stay22:sdk:3.1.0")
+    implementation("com.stay22:sdk:3.1.1")
 }
 ```
 
@@ -39,7 +38,7 @@ dependencies {
 - The published POM declares the SDK's transitive dependencies, so they resolve
   automatically as long as `google()` and `mavenCentral()` are present.
 - The `.aar` merges its own `AndroidManifest.xml`, which contributes the `INTERNET`
-  and `POST_NOTIFICATIONS` permissions, a `booking` scheme `<queries>` entry, and an
+  and `POST_NOTIFICATIONS` permissions, `<queries>` entries for the supported booking apps, and an
   internal notification-tap activity. Do not redeclare these in the host manifest.
 
 ### Manual (AAR)
@@ -62,270 +61,60 @@ dependencies {
 
 ## Quick Start
 
-Initialize once from `Application.onCreate()`. Android requires the `Application`
-argument so the SDK can register lifecycle callbacks before activities start.
+Initialize from `Application.onCreate()`, with your stored consent choice, and register
+that Application class in your manifest.
 
 ```kotlin
 import android.app.Application
-import com.stay22.sdk.Stay22
-import com.stay22.sdk.TravelContext
+import com.stay22.sdk.*
 
-class MyApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-
-        Stay22.setEnabled(this, userHasOptedInToStay22Offers)
-        Stay22.initialize(application = this, aid = "your-partner-id")
-    }
+fun startStay22(application: Application, userOptedIn: Boolean) {
+    Stay22.setEnabled(application, userOptedIn)
+    Stay22.initialize(application = application, aid = "your-partner-id")
 }
 
-Stay22.requestNotificationPermission()
-
-Stay22.setTravelContext(
-    TravelContext(
-        address = "Paris, France",
-        checkinDate = "2026-03-20",
-        checkoutDate = "2026-03-25"
+fun submitTrip(): NotificationResult {
+    // Illustrative app-chosen validity bounds, not SDK defaults.
+    val now = System.currentTimeMillis()
+    val request = NotificationRequest(
+        trip = TravelContext(address = "Paris, France"),
+        timing = NotificationTiming.After(30 * 60 * 1000L),
+        expiresAtMs = now + 12 * 60 * 60 * 1000L,
+        actionExpiresAtMs = now + 24 * 60 * 60 * 1000L,
     )
-)
-```
-
-Register the `Application` subclass in the manifest with `android:name=".MyApp"` if it
-is not already registered. Calling `initialize` more than once is safe; later calls
-are ignored.
-
-## Enablement And Consent
-
-Recommended practices when enabling Stay22:
-
-- consider surfacing opt-in language before enabling Stay22;
-- do not require Stay22 or notification permission for core app functionality;
-- provide an in-app opt-out control.
-
-```kotlin
-Stay22.setEnabled(application, userHasOptedInToStay22Offers)
-```
-
-If your app requires an affirmative consent choice, add this inside the host app's
-`<application>` element. The SDK then stays disabled until you pass an affirmative
-choice to `setEnabled`:
-
-```xml
-<meta-data
-    android:name="com.stay22.sdk.RequiresConsent"
-    android:value="true" />
-```
-
-Call `setEnabled(application, choice)` before or after initialization. It saves the
-choice across launches. Call it with `false` when consent is withdrawn to clear
-pending Stay22 notifications and prevent new ones. To read the enabled state before
-initialization, use `Stay22.readEnabled(application)`.
-
-## Notification Permission
-
-```kotlin
-Stay22.requestNotificationPermission { canShowNotifications ->
-    android.util.Log.d("Stay22", "Notifications available: $canShowNotifications")
+    return Stay22.notifications.ensure(request)
 }
 ```
 
-`requestNotificationPermission(callback)` reports `true` through the callback if
-Stay22 can already show notifications. Otherwise, on Android 13 (API 33) and newer,
-it requests permission from the current resumed Activity. If permission is unavailable
-and the SDK is uninitialized or no Activity is resumed, the callback reports `false`
-without showing a prompt. On Android 12 and older, it reports the current state
-without prompting. Use `hasNotificationPermission()` when you only need the current
-state. The no-argument `requestNotificationPermission()` returns the permission state
-before the prompt is answered.
+Submit each trip once and keep the request to retry it; a submitted result can still be
+rejected during preparation. The two expiry times are required unless your Stay22 account
+sets a validity policy.
 
-## Travel Context
-
-Pass explicit travel context when your app knows the user's destination intent.
+Ask for notification permission from a resumed Activity. The callback reports the
+user's answer:
 
 ```kotlin
-import com.stay22.sdk.TravelContext
-
-Stay22.setTravelContext(
-    TravelContext(
-        address = "Paris, France",
-        latitude = 48.8566,
-        longitude = 2.3522,
-        checkinDate = "2026-03-20",
-        checkoutDate = "2026-03-25",
-        hotelName = "Hotel Example"
-    )
-)
+Stay22.requestNotificationPermission { granted -> /* ... */ }
 ```
 
-`TravelContext` fields match iOS:
+To keep the SDK off until the user opts in, add an application `meta-data` entry
+`com.stay22.sdk.RequiresConsent` with `android:value="true"`, then call
+`Stay22.setEnabled(application, true)` after consent. Otherwise the SDK starts enabled.
 
-| Field | Description |
-|---|---|
-| `address` | City, venue, hotel, or formatted destination. |
-| `latitude` / `longitude` | Optional destination coordinates. |
-| `checkinDate` / `checkoutDate` | Optional dates in `YYYY-MM-DD` format. |
-| `hotelName` | Optional specific hotel name. |
+## Verify
 
-Notes:
-
-- `setTravelContext` merges non-empty fields, so destination and dates can arrive on
-  different screens.
-- Scheduling only uses explicit travel intent: address, coordinates, or hotel name.
-- The IP/home city is used for suppression only; it is never used as a destination.
-
-To clear explicit context:
+In an internal build, request a test notification that skips the normal delay and
+cooldowns (consent and permission still apply):
 
 ```kotlin
-Stay22.clearTravelContext()
-// or
-Stay22.advanced.clearTravelContext()
-```
-
-## Notification Configuration
-
-```kotlin
-import com.stay22.sdk.NotificationConfig
-import com.stay22.sdk.NotificationInterruptionLevel
-
-Stay22.notificationConfig = NotificationConfig(
-    title = "Hotels in {destination}",
-    subtitle = "{checkin} - {checkout}",
-    message = "Tap to find the best deals nearby",
-    categoryId = "stay22_destinations",
-    threadId = "stay22",
-    interruptionLevel = NotificationInterruptionLevel.active
-)
-```
-
-Supported placeholders are `{destination}`, `{checkin}`, and `{checkout}`, which the
-SDK fills from the current travel context at schedule time (`{checkin}`/`{checkout}`
-resolve to empty when no dates are set). Unsupported tokens are left unchanged.
-
-`NotificationConfig` fields match iOS:
-
-| Field | Default |
-|---|---|
-| `title` | `"Hotels in {destination}"` |
-| `subtitle` | `null` |
-| `message` | `"Tap to find the best deals nearby"` |
-| `categoryId` | `"stay22_destinations"` |
-| `threadId` | `"stay22"` |
-| `badge` | `null` |
-| `launchImageName` | `null` |
-| `targetContentIdentifier` | `null` |
-| `interruptionLevel` | `null` |
-| `relevanceScore` | `null` |
-| `attachments` | `emptyList()` |
-| `actions` | `emptyList()` |
-
-Android-specific notification channel and small-icon selection are internal. The app
-icon is used as the notification icon when available. For a reliable Android
-notification small icon, provide a monochrome drawable in the host app and point
-the SDK at it from the app manifest:
-
-```xml
-<application>
-    <meta-data
-        android:name="com.stay22.sdk.notification_small_icon"
-        android:resource="@drawable/ic_stat_notification" />
-</application>
-```
-
-Use a simple white/transparent status-bar style drawable rather than the adaptive
-launcher icon.
-
-## Advanced Namespace
-
-```kotlin
-Stay22.advanced.setEventHandler { event ->
-    when (event) {
-        is Stay22Event.NotificationScheduled -> Unit
-        is Stay22Event.NotificationClicked -> Unit
-        else -> Unit
-    }
-}
-
-Stay22.advanced.scheduleNotification()
-```
-
-`scheduleNotification()` runs the same scheduling pipeline as automatic background
-scheduling, using the current travel context and server-configured delay. The SDK
-keeps at most one pending Stay22 notification; a changed travel context replaces it,
-while the same context keeps the existing timer.
-
-## Events
-
-```kotlin
-Stay22.advanced.setEventListener { event ->
-    when (event) {
-        is Stay22Event.LocationUpdated -> Unit
-        is Stay22Event.NotificationScheduled -> Unit
-        is Stay22Event.NotificationShown -> Unit
-        is Stay22Event.NotificationClicked -> Unit
-        is Stay22Event.NotificationBlocked -> Unit
-        is Stay22Event.NotificationSkipped -> Unit
-        is Stay22Event.NotificationCancelled -> Unit
-        is Stay22Event.EnabledChanged -> Unit
-        Stay22Event.TravelContextCleared -> Unit
-    }
-}
-```
-
-## Testing
-
-For local and staging validation only:
-
-```kotlin
-Stay22.testing.force = true
 Stay22.testing.showLogs = true
+Stay22.testing.scheduleNotification(TravelContext(address = "Paris, France"))
 ```
 
-Force mode uses a 5-second notification delay and skips local gates so the same flow
-can be tested repeatedly. Do not ship production builds with force mode on.
+Keep test calls and logging out of public builds.
 
-## Behavior Summary
-
-| Condition | Behavior |
-|---|---|
-| SDK disabled | Pending notification state is cleared and no new notification is scheduled. |
-| Missing destination | Scheduling is skipped. |
-| App foregrounded | Automatic scheduling waits for background; refreshed context can update an existing pending notification, and advanced scheduling can run foreground. |
-| Home destination | Scheduling is skipped when the destination matches the server-detected home city. |
-| Partner config disabled | Pending notification state is cleared. |
-| Duplicate context | Existing pending notification timer is kept. |
-| Notification permission denied | Scheduling/showing is blocked and an event is emitted. |
-| Local cooldown | Scheduling is skipped. |
-
-The SDK keeps at most one pending Stay22 notification at a time. Server partner config
-and Nova decisions control remote enablement, delay, distance, cooldown, and frequency.
-
-## Privacy
-
-The SDK does not request device GPS permission and is not used for cross-app tracking.
-It may send the partner ID, explicit destination context, and anonymous SDK
-interaction events to Stay22. The host app is responsible for consent, privacy policy
-disclosures, and app-store privacy answers.
-
-## Public API
-
-| API | Purpose |
-|---|---|
-| `Stay22.initialize(application, aid)` | Start the SDK from `Application.onCreate()`. Android requires the `Application` for lifecycle callbacks. |
-| `Stay22.setEnabled(application, enabled)` / `readEnabled(application)` | Save or read consent before initialization. |
-| `Stay22.isEnabled` | Enable/disable scheduling after initialization. |
-| `Stay22.isInitialized` | Whether initialization completed. |
-| `Stay22.notificationConfig` | Notification text and notification metadata. |
-| `Stay22.campaignId` | Optional attribution value added to generated URLs. |
-| `Stay22.hasNotificationPermission()` | Current Android notification permission state. |
-| `Stay22.requestNotificationPermission(callback)` | Request Android 13+ notification permission and learn whether Stay22 can show notifications. |
-| `Stay22.setTravelContext(...)` | Provide destination context. |
-| `Stay22.clearTravelContext()` | Clear explicit travel context and pending notification state. |
-| `Stay22.advanced.setEventListener(...)` | Register an event listener. |
-| `Stay22.advanced.setEventHandler(...)` | Register a closure-style event handler. |
-| `Stay22.advanced.clearTravelContext()` | Advanced namespace equivalent of clearing travel context. |
-| `Stay22.advanced.scheduleNotification()` | Run the normal scheduling pipeline for the current context. |
-| `Stay22.testing.force` | Testing-only force flag. |
-| `Stay22.testing.showLogs` | Testing-only SDK logging flag. |
+Upgrading from 1.x: the breaking changes and what to call instead are in this
+repository's [Releases](https://github.com/Stay22/stay22-android-sdk/releases).
 
 ## License
 
@@ -335,5 +124,5 @@ agreement with Stay22. Contact your Stay22 representative for terms.
 
 ## Support
 
-Questions? See https://dev.stay22.com/docs/mobile-sdk or contact your Stay22
-representative.
+Full guide, privacy details and changelog: https://dev.stay22.com/docs/mobile-sdk.
+Questions? Contact your Stay22 representative.
